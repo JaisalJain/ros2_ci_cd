@@ -1,0 +1,50 @@
+name: ros2-pipeline-test
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    
+    steps:
+      # Steps 1-3: Install ROS 2 Jazzy, colcon, and initialize the workspace
+      - name: Install ROS 2 and Setup Workspace
+        run: |
+          # Set up sources
+          sudo apt update && sudo apt install -y curl gnupg lsb-release
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2-latest.list'
+          
+          # Install ROS 2 Jazzy packages and build tools
+          sudo apt update
+          sudo apt install -y ros-jazzy-desktop python3-colcon-common-extensions
+          
+          # Source ROS 2 environment and build initial empty workspace
+          echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+          source ~/.bashrc
+          mkdir -p ros2_ws/src/ros2_ci_cd
+          cd ros2_ws
+          colcon build
+          source install/setup.bash
+
+      # Step 4: Clone the repository into the workspace
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          path: ros2_ws/src/ros2_ci_cd
+
+      # Steps 4-5: Install dependencies using rosdep and compile the package
+      - name: Install Dependencies and Compile Workspace
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          sudo apt install -y python3-rosdep
+          sudo rosdep init
+          rosdep update --include-eol-distros
+          
+          cd ros2_ws
+          rosdep install --from-paths src -y --ignore-src
+          
+          # Compile the workspace
+          colcon build
